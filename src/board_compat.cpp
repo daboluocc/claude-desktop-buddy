@@ -199,8 +199,8 @@ void BoardCompat::begin() {
   Lcd.init();
   Serial.println("[board] tft rotation");
   Lcd.setRotation(0);
-  Serial.println("[board] raw backlight high");
-  rawBacklight(true);
+  Serial.println("[board] backlight on");
+  Axp.SetLDO2(true);
   delay(800);
   Serial.println("[board] fill red");
   Lcd.fillScreen(TFT_RED);
@@ -208,11 +208,11 @@ void BoardCompat::begin() {
   Serial.println("[board] fill green");
   Lcd.fillScreen(TFT_GREEN);
   delay(800);
-  Serial.println("[board] raw backlight low");
-  rawBacklight(false);
+  Serial.println("[board] backlight off");
+  Axp.SetLDO2(false);
   delay(800);
-  Serial.println("[board] raw backlight high");
-  rawBacklight(true);
+  Serial.println("[board] backlight on");
+  Axp.SetLDO2(true);
   delay(800);
   Serial.println("[board] fill blue");
   Lcd.fillScreen(TFT_BLUE);
@@ -220,8 +220,8 @@ void BoardCompat::begin() {
   Serial.println("[board] fill black");
   Lcd.fillScreen(TFT_BLACK);
   Serial.println("[board] buttons");
-  BtnA.begin(BUDDY_BTN_A_GPIO, BUDDY_BTN_ACTIVE_LEVEL, true);
-  BtnB.begin(BUDDY_BTN_B_GPIO, BUDDY_BTN_ACTIVE_LEVEL, true);
+  BtnA.begin(BUDDY_BTN_A_GPIO, HIGH, false);   // 3V3 直驱，无内部上拉
+  BtnB.begin(BUDDY_BTN_B_GPIO, LOW, true);    // 内部上拉，按下接 GND
   Serial.println("[board] ready");
 }
 
