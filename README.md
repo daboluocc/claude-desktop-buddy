@@ -27,6 +27,20 @@ depends on the M5StickCPlus library for its display, IMU, and button
 drivers—so you'll need that board, or a fork that swaps those drivers for
 your own pin layout.
 
+There is now an experimental `bbclaw-esp32s3` PlatformIO environment for
+the `/Volumes/1TB/github/bbclaw` ESP32-S3 board. It maps:
+
+- display: ST7789 1.47" on GPIO `9/10/11/12/13/14`
+- primary button: GPIO `7`
+- temporary secondary button: GPIO `41` with internal pull-up enabled; it
+  may stay unconnected for now
+
+Board-specific downgrades in this mode:
+
+- no IMU, so shake and face-down nap are disabled
+- no AXP PMU/power key, so battery/current/USB reporting is approximate
+- buzzer is currently a no-op
+
 ## Flashing
 
 Install
@@ -41,6 +55,12 @@ If you're starting from a previously-flashed device, wipe it first:
 
 ```bash
 pio run -t erase && pio run -t upload
+```
+
+For the bbclaw board:
+
+```bash
+pio run -e bbclaw-esp32s3 -t upload
 ```
 
 Once running, you can also wipe everything from the device itself: **hold A

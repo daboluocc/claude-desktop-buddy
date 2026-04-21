@@ -1,4 +1,4 @@
-#include <M5StickCPlus.h>
+#include "board_compat.h"
 #include <LittleFS.h>
 #include <stdarg.h>
 #include "ble_bridge.h"
@@ -23,7 +23,11 @@ static void startBt() {
 const int W = 135, H = 240;
 const int CX = W / 2;
 const int CY_BASE = 120;
+#ifdef BUDDY_BOARD_BBCLAW
+const int LED_PIN = -1;
+#else
 const int LED_PIN = 10;          // red LED, active-low
+#endif
 
 // Colors used across multiple UI surfaces
 const uint16_t HOT   = 0xFA20;   // red-orange: warnings, impatience, deny
@@ -107,6 +111,10 @@ static void wake() {
   if (dimmed) { applyBrightness(); dimmed = false; }
 }
 bool     responseSent = false;
+
+static int canvasX() { return (M5.Lcd.width() - W) / 2; }
+static int canvasY() { return (M5.Lcd.height() - H) / 2; }
+static void pushMainSprite() { spr.pushSprite(canvasX(), canvasY()); }
 
 static void beep(uint16_t freq, uint16_t dur) {
   if (settings().sound) M5.Beep.tone(freq, dur);
@@ -941,8 +949,10 @@ void setup() {
   M5.Imu.Init();
   M5.Beep.begin();
   startBt();
-  pinMode(LED_PIN, OUTPUT);
-  digitalWrite(LED_PIN, HIGH);   // off
+  if (LED_PIN >= 0) {
+    pinMode(LED_PIN, OUTPUT);
+    digitalWrite(LED_PIN, HIGH);   // off
+  }
   applyBrightness();
   lastInteractMs = millis();
   statsLoad();
@@ -978,7 +988,7 @@ void setup() {
       spr.drawString("a buddy appears", W/2, H/2 + 12);
     }
     spr.setTextDatum(TL_DATUM); spr.setTextSize(1);
-    spr.pushSprite(0, 0);
+    pushMainSprite();
     delay(1800);
   }
 
@@ -1003,9 +1013,9 @@ void loop() {
 
   // LED: pulse on attention, otherwise off
   if (activeState == P_ATTENTION && settings().led) {
-    digitalWrite(LED_PIN, (now / 400) % 2 ? LOW : HIGH);
+    if (LED_PIN >= 0) digitalWrite(LED_PIN, (now / 400) % 2 ? LOW : HIGH);
   } else {
-    digitalWrite(LED_PIN, HIGH);
+    if (LED_PIN >= 0) digitalWrite(LED_PIN, HIGH);
   }
 
   // shake → dizzy + force scenario advance
@@ -1226,7 +1236,7 @@ void loop() {
     if (resetOpen) drawReset();
     else if (settingsOpen) drawSettings();
     else if (menuOpen) drawMenu();
-    spr.pushSprite(0, 0);
+    pushMainSprite();
   }
 
   // Face-down nap: dim immediately, pause animations, accumulate sleep time.
