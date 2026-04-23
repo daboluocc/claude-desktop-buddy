@@ -63,6 +63,16 @@ bool     dimmed = false;
 bool     screenOff = false;
 bool     swallowBtnA = false;
 bool     swallowBtnB = false;
+#if BUDDY_ENCODER_ENABLE
+int8_t   encSteps = 0;
+bool     encBtnLong = false;
+bool     swallowEncBtn = false;
+uint8_t  approvalSel = 0;           // 0=approve, 1=deny
+uint32_t encNavLastMs = 0;          // last nav event timestamp
+uint32_t encNavRepeatMs = 0;        // auto-repeat: fire every 80ms after 400ms hold
+bool     encNavHeld = false;        // true while encoder is actively rotating
+int8_t   encNavLastDir = 0;         // last rotation direction (+1/-1)
+#endif
 bool     buddyMode = false;
 bool     gifAvailable = false;
 const uint8_t SPECIES_GIF = 0xFF;   // species NVS sentinel: use the installed GIF
@@ -287,7 +297,11 @@ static void drawSettings() {
       spr.printf("%u/%u", pos, total);
     }
   }
+#if BUDDY_ENCODER_ENABLE
+  drawMenuHints(p, mx, mw, my + mh - 12, "Turn", "Push");
+#else
   drawMenuHints(p, mx, mw, my + mh - 12, "Next", "Change");
+#endif
 }
 
 static void drawReset() {
@@ -307,7 +321,11 @@ static void drawReset() {
     if (armed) spr.setTextColor(HOT, PANEL);
     spr.print(armed ? "really?" : resetItems[i]);
   }
+#if BUDDY_ENCODER_ENABLE
+  drawMenuHints(p, mx, mw, my + mh - 12, "Turn", "Push");
+#else
   drawMenuHints(p, mx, mw, my + mh - 12);
+#endif
 }
 
 void menuConfirm() {
@@ -342,7 +360,11 @@ void drawMenu() {
     spr.print(menuItems[i]);
     if (i == 4) spr.print(dataDemo() ? "  on" : "  off");
   }
+#if BUDDY_ENCODER_ENABLE
+  drawMenuHints(p, mx, mw, my + mh - 12, "Turn", "Push");
+#else
   drawMenuHints(p, mx, mw, my + mh - 12);
+#endif
 }
 
 // Clock orientation: gravity along the in-plane X axis means the stick is
@@ -766,12 +788,36 @@ static void drawApproval() {
     spr.setCursor(4, H - 12);
     spr.print("sent...");
   } else {
+#if BUDDY_ENCODER_ENABLE
+    // Highlight-style: selected option gets filled background
+    const int btnW = 56, btnH = 14, btnY = H - 16;
+    const int approveX = 4, denyX = W - btnW - 4;
+    if (approvalSel == 0) {
+      spr.fillRoundRect(approveX, btnY, btnW, btnH, 3, GREEN);
+      spr.setTextColor(p.bg, GREEN);
+    } else {
+      spr.drawRoundRect(approveX, btnY, btnW, btnH, 3, GREEN);
+      spr.setTextColor(GREEN, p.bg);
+    }
+    spr.setCursor(approveX + 4, btnY + 3);
+    spr.print("approve");
+    if (approvalSel == 1) {
+      spr.fillRoundRect(denyX, btnY, btnW, btnH, 3, HOT);
+      spr.setTextColor(p.bg, HOT);
+    } else {
+      spr.drawRoundRect(denyX, btnY, btnW, btnH, 3, HOT);
+      spr.setTextColor(HOT, p.bg);
+    }
+    spr.setCursor(denyX + 10, btnY + 3);
+    spr.print("deny");
+#else
     spr.setTextColor(GREEN, p.bg);
     spr.setCursor(4, H - 12);
     spr.print("A: approve");
     spr.setTextColor(HOT, p.bg);
     spr.setCursor(W - 48, H - 12);
     spr.print("B: deny");
+#endif
   }
 }
 
@@ -1045,11 +1091,15 @@ void loop() {
       applyDisplayMode();
       characterInvalidate();
       if (buddyMode) buddyInvalidate();
+#if BUDDY_ENCODER_ENABLE
+      approvalSel = 0;
+#endif
     }
   }
 
   bool inPrompt = tama.promptId[0] && !responseSent;
 
+#if !BUDDY_ENCODER_ENABLE
   // Button-press wake. Track which button woke the screen so its full
   // press cycle (including long-press) is swallowed — you don't want
   // BtnA-to-wake to also cycle displayMode or open the menu.
@@ -1071,9 +1121,60 @@ void loop() {
       screenOff = true;
     }
   }
+#endif
 
+  // --- Semantic input events ---
+  bool navFwd = false, navBack = false, navConfirm = false, doMenuToggle = false;
+
+#if BUDDY_ENCODER_ENABLE
+  encSteps = M5.Encoder.consumeSteps();
+  if (screenOff && encSteps != 0) { wake(); encSteps = 0; }
+  if (M5.EncBtn.isPressed()) { if (screenOff) swallowEncBtn = true; wake(); }
+  if (M5.EncBtn.pressedFor(600) && !encBtnLong && !swallowEncBtn) {
+    encBtnLong = true;
+    doMenuToggle = true;
+  }
+  if (M5.EncBtn.wasReleased()) {
+    if (!encBtnLong && !swallowEncBtn) navConfirm = true;
+    encBtnLong = false;
+    swallowEncBtn = false;
+  }
+
+  // Each detent produces exactly one tick (+1 CW or -1 CCW).
+  // Fire nav immediately with rate-limit to prevent bouncing.
+  if (encSteps != 0) {
+    int dir = (encSteps > 0) ? 1 : -1;
+    if ((int32_t)(now - encNavLastMs) >= 80) {
+      navFwd = (dir > 0);
+      navBack = (dir < 0);
+      encNavLastMs = now;
+      encNavRepeatMs = now + 400;
+      encNavHeld = true;
+      encNavLastDir = dir;
+    }
+  }
+  // Auto-repeat while continuously rotating: fire every 80ms after 400ms
+  if (encNavHeld && encSteps == 0 && now >= encNavRepeatMs) {
+    encNavRepeatMs = now + 80;
+    navFwd = (encNavLastDir > 0);
+    navBack = (encNavLastDir < 0);
+    encNavLastMs = now;
+  }
+  // Clear held state if no new ticks for 300ms
+  if (encNavHeld && encSteps == 0 && now - encNavLastMs > 300) {
+    encNavHeld = false;
+  }
+#endif
+
+#if !BUDDY_ENCODER_ENABLE
+  // BtnA long-press = menu toggle (non-encoder builds only)
   if (M5.BtnA.pressedFor(600) && !btnALong && !swallowBtnA) {
     btnALong = true;
+    doMenuToggle = true;
+  }
+#endif
+
+  if (doMenuToggle) {
     beep(800, 60);
     if (resetOpen) { resetOpen = false; }
     else if (settingsOpen) { settingsOpen = false; characterInvalidate(); }
@@ -1084,6 +1185,67 @@ void loop() {
     }
     Serial.println(menuOpen ? "menu open" : "menu close");
   }
+
+#if BUDDY_ENCODER_ENABLE
+  if (M5.BtnA.wasReleased()) { btnALong = false; swallowBtnA = false; }
+
+  // --- Encoder: rotate = navigate, push = confirm ---
+  int navDelta = navFwd ? 1 : (navBack ? -1 : 0);
+  if (navDelta != 0) {
+    beep(1800, 30);
+    if (inPrompt) {
+      approvalSel = 1 - approvalSel;
+    } else if (resetOpen) {
+      resetSel = (uint8_t)((resetSel + navDelta + RESET_N) % RESET_N);
+      resetConfirmIdx = 0xFF;
+    } else if (settingsOpen) {
+      settingsSel = (uint8_t)((settingsSel + navDelta + SETTINGS_N) % SETTINGS_N);
+    } else if (menuOpen) {
+      menuSel = (uint8_t)((menuSel + navDelta + MENU_N) % MENU_N);
+    } else if (displayMode == DISP_INFO) {
+      infoPage = (uint8_t)((infoPage + navDelta + INFO_PAGES) % INFO_PAGES);
+    } else if (displayMode == DISP_PET) {
+      petPage = (uint8_t)((petPage + navDelta + PET_PAGES) % PET_PAGES);
+      applyDisplayMode();
+    } else {
+      msgScroll = constrain((int)msgScroll + navDelta, 0, 30);
+    }
+  }
+
+  if (navConfirm) {
+    if (inPrompt) {
+      const char* decision = (approvalSel == 0) ? "once" : "deny";
+      char cmd[96];
+      snprintf(cmd, sizeof(cmd), "{\"cmd\":\"permission\",\"id\":\"%s\",\"decision\":\"%s\"}", tama.promptId, decision);
+      sendCmd(cmd);
+      responseSent = true;
+      if (approvalSel == 0) {
+        uint32_t tookS = (millis() - promptArrivedMs) / 1000;
+        statsOnApproval(tookS);
+        beep(2400, 60);
+        if (tookS < 5) triggerOneShot(P_HEART, 2000);
+      } else {
+        statsOnDenial();
+        beep(600, 60);
+      }
+    } else if (resetOpen) {
+      beep(2400, 30);
+      applyReset(resetSel);
+    } else if (settingsOpen) {
+      beep(2400, 30);
+      applySetting(settingsSel);
+    } else if (menuOpen) {
+      beep(2400, 30);
+      menuConfirm();
+    } else {
+      beep(1800, 30);
+      displayMode = (displayMode + 1) % DISP_COUNT;
+      applyDisplayMode();
+    }
+  }
+
+#else  // !BUDDY_ENCODER_ENABLE — original two-button input
+
   if (M5.BtnA.wasReleased()) {
     if (!btnALong && !swallowBtnA) {
       if (inPrompt) {
@@ -1115,7 +1277,7 @@ void loop() {
     swallowBtnA = false;
   }
 
-  // BtnB: pet → heart
+  // BtnB: confirm / deny / scroll
   if (M5.BtnB.wasPressed()) {
     if (swallowBtnB) { swallowBtnB = false; }
     else
@@ -1147,6 +1309,8 @@ void loop() {
       msgScroll = (msgScroll >= 30) ? 0 : msgScroll + 1;
     }
   }
+
+#endif  // BUDDY_ENCODER_ENABLE
 
   // blink bookkeeping
 

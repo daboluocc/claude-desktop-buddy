@@ -42,9 +42,13 @@ void BoardButton::begin(int pin, int activeLevel, bool pullup) {
   _wasReleased = false;
   _lastBounceMs = millis();
   _pressedAtMs = rawPressed ? millis() : 0;
+  if (_pin >= 0) {
+    Serial.printf("[btn] pin=%d active=%s pullup=%d init=%d\n", _pin, _activeLevel == LOW ? "LOW" : "HIGH", _pullup, rawPressed);
+  }
 }
 
 void BoardButton::update() {
+  if (_pin < 0) return;
   _wasPressed = false;
   _wasReleased = false;
   bool rawPressed = digitalRead(_pin) == _activeLevel;
@@ -61,6 +65,9 @@ void BoardButton::update() {
     _wasPressed = true;
   } else {
     _wasReleased = true;
+  }
+  if (_wasPressed || _wasReleased) {
+    Serial.printf("[btn] pin=%d pressed=%d released=%d raw=%d\n", _pin, _wasPressed, _wasReleased, rawPressed);
   }
 }
 
@@ -183,6 +190,48 @@ void BoardAxp::PowerOff() const {
   esp_deep_sleep_start();
 }
 
+#if BUDDY_ENCODER_ENABLE
+static constexpr int8_t _encTable[16] = {
+   0, -1,  1,  0,
+   1,  0,  0, -1,
+  -1,  0,  0,  1,
+   0,  1, -1,  0
+};
+
+void BoardEncoder::begin(int pinA, int pinB) {
+  _pinA = pinA; _pinB = pinB;
+  pinMode(_pinA, INPUT_PULLUP);
+  pinMode(_pinB, INPUT_PULLUP);
+  _prevState = (digitalRead(_pinA) << 1) | digitalRead(_pinB);
+  _accumSteps = 0;
+  Serial.printf("[enc] init A=%d B=%d state=%d\n", _pinA, _pinB, _prevState);
+}
+
+void BoardEncoder::update() {
+  uint8_t s = (digitalRead(_pinA) << 1) | digitalRead(_pinB);
+  int8_t delta = _encTable[(_prevState << 2) | s];
+  if (s != _prevState) {
+    // Only count transitions AWAY from center (state 3 = both pins HIGH/idle).
+    // Transitions returning TO center (prev=1/2, cur=3) are filtered out.
+    // This gives exactly one tick per encoder detent.
+    if (_prevState == 3 && s != 3) {
+      _accumSteps += delta;
+      if (s != _prevState) {
+        Serial.printf("[enc] tick prev=%d cur=%d delta=%d accum=%d\n", _prevState, s, delta, _accumSteps);
+      }
+    }
+  }
+  _prevState = s;
+}
+
+int8_t BoardEncoder::consumeSteps() {
+  int8_t s = _accumSteps;
+  if (s != 0) Serial.printf("[enc] consume=%d\n", s);
+  _accumSteps = 0;
+  return s;
+}
+#endif
+
 BoardCompat::BoardCompat() : Lcd() {}
 
 void BoardCompat::begin() {
@@ -222,12 +271,21 @@ void BoardCompat::begin() {
   Serial.println("[board] buttons");
   BtnA.begin(BUDDY_BTN_A_GPIO, BUDDY_BTN_A_ACTIVE, (bool)BUDDY_BTN_A_PULLUP);
   BtnB.begin(BUDDY_BTN_B_GPIO, BUDDY_BTN_B_ACTIVE, (bool)BUDDY_BTN_B_PULLUP);
+#if BUDDY_ENCODER_ENABLE
+  Encoder.begin(BUDDY_ENC_A_GPIO, BUDDY_ENC_B_GPIO);
+  EncBtn.begin(BUDDY_ENC_KEY_GPIO, BUDDY_ENC_KEY_ACTIVE, (bool)BUDDY_ENC_KEY_PULLUP);
+  Serial.println("[board] encoder");
+#endif
   Serial.println("[board] ready");
 }
 
 void BoardCompat::update() {
   BtnA.update();
   BtnB.update();
+#if BUDDY_ENCODER_ENABLE
+  Encoder.update();
+  EncBtn.update();
+#endif
 }
 
 BoardCompat M5;

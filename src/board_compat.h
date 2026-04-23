@@ -53,6 +53,10 @@
 #define BUDDY_BATTERY_ADC_GPIO 3
 #endif
 
+#ifndef BUDDY_ENCODER_ENABLE
+#define BUDDY_ENCODER_ENABLE 0
+#endif
+
 typedef struct {
   uint8_t Hours;
   uint8_t Minutes;
@@ -87,6 +91,19 @@ class BoardButton {
   uint32_t _lastBounceMs;
   uint32_t _pressedAtMs;
 };
+
+#if BUDDY_ENCODER_ENABLE
+class BoardEncoder {
+ public:
+  void begin(int pinA, int pinB);
+  void update();
+  int8_t consumeSteps();    // +CW, -CCW, resets to 0
+ private:
+  int _pinA, _pinB;
+  uint8_t _prevState;
+  int8_t _accumSteps;
+};
+#endif
 
 class BoardImu {
  public:
@@ -142,6 +159,10 @@ class BoardCompat {
   TFT_eSPI Lcd;
   BoardButton BtnA;
   BoardButton BtnB;
+#if BUDDY_ENCODER_ENABLE
+  BoardEncoder Encoder;
+  BoardButton EncBtn;
+#endif
   BoardImu Imu;
   BoardBeep Beep;
   BoardRtc Rtc;
