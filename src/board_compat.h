@@ -25,8 +25,28 @@
 #define BUDDY_BTN_ACTIVE_LEVEL HIGH
 #endif
 
+#ifndef BUDDY_BTN_A_ACTIVE
+#define BUDDY_BTN_A_ACTIVE HIGH
+#endif
+
+#ifndef BUDDY_BTN_A_PULLUP
+#define BUDDY_BTN_A_PULLUP 0
+#endif
+
+#ifndef BUDDY_BTN_B_ACTIVE
+#define BUDDY_BTN_B_ACTIVE LOW
+#endif
+
+#ifndef BUDDY_BTN_B_PULLUP
+#define BUDDY_BTN_B_PULLUP 1
+#endif
+
 #ifndef BUDDY_BACKLIGHT_GPIO
 #define BUDDY_BACKLIGHT_GPIO 14
+#endif
+
+#ifndef BUDDY_BACKLIGHT_ACTIVE_LOW
+#define BUDDY_BACKLIGHT_ACTIVE_LOW 0
 #endif
 
 #ifndef BUDDY_BATTERY_ADC_GPIO

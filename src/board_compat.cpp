@@ -11,7 +11,7 @@ constexpr uint32_t kButtonDebounceMs = 25;
 constexpr int kBacklightChannel = 0;
 constexpr int kBacklightFreq = 5000;
 constexpr int kBacklightResolutionBits = 8;
-constexpr bool kBacklightActiveLow = false;
+constexpr bool kBacklightActiveLow = (bool)BUDDY_BACKLIGHT_ACTIVE_LOW;
 
 static void rawBacklight(bool on) {
   pinMode(BUDDY_BACKLIGHT_GPIO, OUTPUT);
@@ -220,8 +220,8 @@ void BoardCompat::begin() {
   Serial.println("[board] fill black");
   Lcd.fillScreen(TFT_BLACK);
   Serial.println("[board] buttons");
-  BtnA.begin(BUDDY_BTN_A_GPIO, HIGH, false);   // 3V3 直驱，无内部上拉
-  BtnB.begin(BUDDY_BTN_B_GPIO, LOW, true);    // 内部上拉，按下接 GND
+  BtnA.begin(BUDDY_BTN_A_GPIO, BUDDY_BTN_A_ACTIVE, (bool)BUDDY_BTN_A_PULLUP);
+  BtnB.begin(BUDDY_BTN_B_GPIO, BUDDY_BTN_B_ACTIVE, (bool)BUDDY_BTN_B_PULLUP);
   Serial.println("[board] ready");
 }
 
